@@ -1,0 +1,482 @@
+---
+title: "Projekt z analizy danych"
+author: "Adrian Żyła"
+date: "2022-11-27"
+output: html_document
+---
+
+
+### Proces pobrania danych, oraz uporządkowania wszystkiego
+```{r include = FALSE}
+#pobranie danych
+library(tidyr)
+library(dplyr)
+library(gapminder)
+library(ggplot2)
+library(countrycode)
+library(CGPfunctions)
+library(RColorBrewer)
+library(jcolors)
+library(GGally)
+library(plotly)
+library(ggpubr)
+
+setwd("D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy")
+
+life_expectancy <- read.csv(file = "D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/life_expectancy_years.csv")
+
+life_expectancy_male <- read.csv(file = "D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/life_expectancy_male.csv")
+
+life_expectancy_female <- read.csv(file = "D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/life_expectancy_female.csv")
+
+BMI_men <- read.csv(file = "D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/body_mass_index_bmi_men_kgperm2.csv")
+
+BMI_woman <- read.csv(file = "D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/body_mass_index_bmi_women_kgperm2.csv")
+
+GPD_percapita <- read.csv(file ="D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/gdp_per_capita_yearly_growth.csv" )
+
+infant_mortality <- read.csv(file = "D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/infant_mortality_rate_per_1000_births.csv")
+
+maternal_deaths <- read.csv(file = "D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/maternal_deaths_total_number.csv")
+
+mean_years_in_school_men <- read.csv(file = "D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/mean_years_in_school_men_25_years_and_older.csv")
+
+mean_years_in_school_woman <- read.csv(file = "D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/mean_years_in_school_women_25_years_and_older.csv")
+
+medical_doctors <- read.csv(file = "D:/Uczelnia/3 SEMESTR/Analiza Danych/Projekt/Life Expectancy/medical_doctors_per_1000_people.csv")
+
+#Zmienne:
+# life_expectancy_male - średnia liczba dłguości życia mężczyzn (w latach)
+# life_expectancy_female - średnia liczba długość życia kobiet (w latach)
+# BMI_men - indeks BMI mężczyzn (kg/m2)
+# BMI_woman - indeks BMI kobiet (kg/m2)
+# GDP_percapita - PKB per capita 
+# infant_mortality - liczba zgonów dzieci podczas pierwszego roku życia (na 1000 urodzeń)
+# maternal_deaths - liczba zgonów matek podczas danego roku, definiowana jako zgon kobiety podczas ciąży lub 42 dni po terminie ciąży.
+# mean_years_in_school_men - średnia ilość lat spędzonych w szkole dla mężyzn w wieku 25 lat i więcej
+# mean_years_in_school_woman - średnia ilość lat spędzonych w szkole dla kobiet w wieku 25 lat i więcej
+
+#czyszczenie danych
+#zamieniam dane szerokie na dane wąskie 
+
+life_expectancy_male_waskie <- gather(life_expectancy_male, year, lifeExpMale, -country)
+
+life_expectancy_female_waskie <- gather(life_expectancy_male, year, lifeExpFemale, -country)
+
+BMI_men_waskie <- gather(BMI_men, year, MaleBMI, -country)
+
+BMI_woman_waskie <- gather(BMI_woman, year, FemaleBMI, -country)
+
+GPD_percapita_waskie <- gather(GPD_percapita, year, GPDperCap, -country)
+
+infant_mortality_waskie <- gather(infant_mortality, year, infant_deaths, -country)
+
+maternal_deaths_waskie <- gather(maternal_deaths, year, maternalDeaths, -country)
+
+mean_years_in_school_men_waskie <- gather(mean_years_in_school_men, year, SchoolingMale, -country)
+
+mean_years_in_school_women_waskie <- gather(mean_years_in_school_woman, year, SchoolingFemale, -country)
+
+medical_doctors_waskie <- gather(medical_doctors, year, numberOfDoctors, -country)
+
+
+#korzystam z pakietu dplyr w celu dalszego czyszczenia danych
+
+#poprawiam kolumnę year, aby usunąć "X" przy liczbie roku i zamieniam typ z char na numeric
+life_expectancy_male_waskie <- separate(life_expectancy_male_waskie, col = year, into = c("null","year"), sep = "X")
+life_expectancy_male <- life_expectancy_male_waskie %>%
+  mutate(year = as.numeric(year))%>%
+  select(country, year, lifeExpMale)
+
+
+life_expectancy_female_waskie <- separate(life_expectancy_female_waskie, col = year, into = c("null","year"), sep = "X")
+life_expectancy_female <- life_expectancy_female_waskie %>%
+  mutate(year = as.numeric(year))%>%
+  select(country, year, lifeExpFemale)
+
+
+#tworzę wspólną zmienną dla life_expectancy_female i life_expectancy_male
+life_expectancy_razem <- left_join(life_expectancy_male, life_expectancy_female)
+
+life_expectancy_razem <- life_expectancy_razem%>%
+  mutate(avrgLifeExp = (lifeExpMale+lifeExpFemale)/2)%>%
+  select(country, year, avrgLifeExp, lifeExpMale, lifeExpFemale)
+
+
+#tworzę medianę długości lat życia ze wszystkich krajów dla każdego roku
+
+life_expectancy_mediana <- life_expectancy_razem %>%
+  filter(year < 2018)%>%
+  select(country, year, avrgLifeExp) %>%
+  group_by(year) %>%
+  summarize(medianLifeExp = median(avrgLifeExp))
+
+
+life_expectancy_mediana_do_korelacji <- life_expectancy_razem %>%
+  filter( year <= 2009, year>=1970)%>%
+  select(country, year, avrgLifeExp) %>%
+  group_by(year) %>%
+  summarize(medianLifeExp = median(avrgLifeExp))
+
+#BMI
+BMI_woman_waskie <- separate(BMI_woman_waskie, col = year, into = c("null","year"), sep = "X")
+BMI_woman <- BMI_woman_waskie %>%
+  mutate(year = as.numeric(year))%>%
+  select(country, year, FemaleBMI)
+
+BMI_men_waskie <- separate(BMI_men_waskie, col = year, into = c("null","year"), sep = "X")
+BMI_men <- BMI_men_waskie %>%
+  mutate(year = as.numeric(year))%>%
+  select(country, year, MaleBMI)
+
+#tworzę wspólną zmienną dla BMI_men i BMI_woman
+BMI_razem <- left_join(BMI_men, BMI_woman)
+
+BMI_razem <- BMI_razem%>%
+  mutate(avrgBMI = (MaleBMI+FemaleBMI)/2)
+
+#GPD percapita
+GPD_percapita_waskie <- separate(GPD_percapita_waskie, col = year, into = c("null","year"), sep = "X")
+GPD_percapita <- GPD_percapita_waskie %>%
+  mutate(year = as.numeric(year))%>%
+  select(country, year, GPDperCap)
+
+#infrant_mortality
+infant_mortality_waskie <- separate(infant_mortality_waskie, col = year, into = c("null","year"), sep = "X")
+infant_mortality <- infant_mortality_waskie %>%
+  mutate(year = as.numeric(year))%>%
+  select(country, year, infant_deaths)
+
+#medical doctors per 100 people
+medical_doctors_waskie <- separate(medical_doctors_waskie, col = year, into = c("null","year"), sep = "X")
+medical_doctors <- medical_doctors_waskie %>%
+  mutate(year = as.numeric(year))%>%
+  select(country, year, numberOfDoctors)
+
+#maternal deaths
+maternal_deaths_waskie <- separate(maternal_deaths_waskie, col = year, into = c("null","year"), sep = "X")
+maternal_deaths <- maternal_deaths_waskie %>%
+  mutate(year = as.numeric(year), maternalDeaths = as.numeric(maternalDeaths))%>%
+  select(country, year, maternalDeaths)
+
+#mean years in school
+mean_years_in_school_men_waskie <- separate(mean_years_in_school_men_waskie, col = year, into = c("null","year"), sep = "X")
+mean_years_in_school_men <- mean_years_in_school_men_waskie %>%
+  mutate(year = as.numeric(year))%>%
+  select(country, year, SchoolingMale)
+
+mean_years_in_school_women_waskie <- separate(mean_years_in_school_women_waskie, col = year, into = c("null","year"), sep = "X")
+mean_years_in_school_women <- mean_years_in_school_women_waskie %>%
+  mutate(year = as.numeric(year))%>%
+  select(country, year, SchoolingFemale)
+
+#tworzę wspólną zmienną dla mean_years_in_school_men i mean_years_in_school_women
+
+mean_years_in_school_razem <- left_join(mean_years_in_school_women, mean_years_in_school_men)
+mean_years_in_school_razem <- mean_years_in_school_razem%>%
+  mutate(avrgSchooling = (SchoolingFemale + SchoolingMale)/2)%>%
+  select(country, year, SchoolingFemale, SchoolingMale, avrgSchooling)
+
+#tworzę medianę długości życia poświęconych na naukę
+
+mean_years_in_school_mediana <- mean_years_in_school_razem %>%
+  select(country, year, avrgSchooling) %>%
+  group_by(year) %>%
+  summarize(medianSchooling = median(avrgSchooling))
+
+#sprawdzam statystyki opisowe utworzonych zestawów i zmiennych za pomocą funkcji summary
+
+
+summary(life_expectancy_razem)
+
+summary(BMI_razem)
+
+summary(infant_mortality)
+
+summary(maternal_deaths)
+
+summary(mean_years_in_school_razem)
+
+summary(medical_doctors)
+
+#współna tabela dla wszystkich zestawów
+
+tabela <- left_join(life_expectancy_razem, BMI_razem)
+tabela <- left_join(tabela, mean_years_in_school_razem)
+tabela <- left_join(tabela, infant_mortality)
+tabela <- left_join(tabela, life_expectancy_mediana)
+tabela <- left_join(tabela, maternal_deaths)
+
+
+#usuwam brakujące wartości z tabeli
+tabela_bez_NA <- na.omit(tabela)
+
+
+#dodaje do tabela_bez_NA kolumne kontynenty
+tabela_bez_NA$continent <- countrycode(sourcevar = tabela_bez_NA[[1]],
+                                       origin = "country.name",
+                                       destination = "continent",
+                                       nomatch = NA)
+
+#mediana średniej dlugosc zycia na kontynentach wykres
+life_expectancy_razem$continent <- countrycode(sourcevar = life_expectancy_razem[[1]],
+                                               origin = "country.name",
+                                               destination = "continent",
+                                               nomatch = NA)
+
+
+life_expectancy_razem_bez_NA <- na.omit(life_expectancy_razem)
+
+
+```
+### Pytania badawcze: 
+
+### 1. Czy średnia długość życia na całym świecie wzrasta? 
+
+```{R}
+life_expectancy_continents_plot <- life_expectancy_razem%>%
+  group_by(year, continent)%>%
+  filter(year < 2022)%>%
+  mutate(median_lifeExp = median(avrgLifeExp))%>%
+  ggplot(aes(x = year, y = median_lifeExp, col = continent))+
+  geom_line(size = 1) + 
+  #geom_point(size = 1.5) +
+  scale_color_brewer(palette = "Set1")+
+  scale_x_continuous(n.breaks=20) +
+  labs(title = "Mediana średniej długości życia w poszczególnych latach",
+       x = "Rok",
+       y = "Średnia długość życia (w latach)")+
+  theme_bw()
+
+(life_expectancy_continents_plot)
+```
+
+#### Jak możemy zauważyć, średnia długość życia na każdym kontynencie wraz z ubiegiem lat wzrasta, także poniższy wykres zawierający medianę średniej długości życia na całym świecie ewidentnie wskazuję na wzrost tej wartości wraz z kolejnymi latami
+```{R}
+life_expectancy_world_plot <- life_expectancy_razem_bez_NA%>%
+  group_by(year)%>%
+  filter(year<2020)%>%
+  mutate(median_lifeExp = median(avrgLifeExp))%>%
+  ggplot(aes(x = year, y = median_lifeExp))+
+  geom_line(size = 3, col = "red") + 
+  scale_color_brewer(palette = "Set1")+
+  labs(title = "Mediana średniej długości życia w poszczególnych latach",
+       x = "Rok",
+       y = "Średnia długość życia (w latach)")+
+  theme_bw()
+
+(life_expectancy_world_plot)
+```
+
+### 2. Czy średnia ilość lat poświęconych na edukację ma wpływ na wydłużenie średniej długości życia
+
+```{R}
+schooling_plot <- ggplot(data = tabela_bez_NA, aes(x = tabela_bez_NA$avrgSchooling, y = tabela_bez_NA$avrgLifeExp))+
+           geom_point(shape=19, color="darkblue", size = 2)+
+           geom_smooth(method=lm, linetype="solid", color="red", fill="pink")+
+           labs(title = "Zależność między śr. długością lat życia, a śr. ilością lat poświęconych na edukację",
+                x = "Średnia ilość lat poświęconych na edukację",
+                y = "Średnia długość życia (w latach)")+
+           theme_bw()
+
+(schooling_plot)
+```
+
+#### Na powyższym wykresie widać, zależność, że wraz ze wzrostem liczby lat poświęconych na edukację, wzrasta średnia długość życia.
+
+#### Poniżej porównam osobno wykresy zależności mediany średniej długości lat życia od ilości lat poświęconych na edukację dla mężczyzn i kobiet aby sprawdzić czy wartości te się różnią w zależności od płci.
+
+```{R}
+schooling_male_plot <- tabela_bez_NA%>%
+  group_by(SchoolingMale)%>%
+  mutate(median_lifeExp = median(avrgLifeExp))%>%
+  ggplot()+
+  geom_point(aes(y = median_lifeExp, x = tabela_bez_NA$SchoolingMale), color="darkblue")+
+  labs(x = "Ilości lat poświęconych na edukację (u mężczyzn)",
+       y = "Mediana średniej długości lat życia")+
+  theme_bw()
+
+schooling_female_plot <-  tabela_bez_NA%>%
+  group_by(SchoolingFemale)%>%
+  mutate(median_lifeExp = median(avrgLifeExp))%>%
+  ggplot()+
+  geom_point(aes(y = median_lifeExp, x = tabela_bez_NA$SchoolingFemale), color="darkred")+
+  labs(x = "Ilośc lat poświęconych na edukację (u kobiet)",
+       y = "Mediana średniej długości lat życia")+
+  theme_bw()
+
+schooling_male_female_plot <- ggplot()+
+  tabela_bez_NA%>%
+  group_by(SchoolingFemale)%>%
+  mutate(median_lifeExp = median(avrgLifeExp))%>%
+  geom_point(mapping = aes(y = median_lifeExp, x = tabela_bez_NA$SchoolingFemale), color = "darkred")+
+  tabela_bez_NA%>%
+  group_by(SchoolingMale)%>%
+  mutate(median_lifeExp = median(avrgLifeExp))%>%
+  geom_point(mapping = aes(y = median_lifeExp, x = tabela_bez_NA$SchoolingMale), color="darkblue")+
+  labs(x = "Ilośc lat poświęconych na edukację",
+       y = "Mediana średniej długości lat życia")+
+  theme_bw()
+  
+schooling_male_female <- ggarrange(schooling_female_plot,schooling_male_plot,schooling_male_female_plot,
+                                   labels = c("Kobiety", "Mężczyźni", "Razem"),
+                                   ncol = 2, nrow = 2 )
+
+(schooling_male_female)
+
+```
+
+#### Jak widać na powyższym zestawieniu wykresów, płeć w przypadku tego zestawu danych nie ma większego wpływu na zmianę średniej długości lat życia. 
+
+#### Przedstawione wykresy wykazały, że osoby, które poświęciły większą ilość lat na edukację również charakteryzują się dłuższą średnią ilością lat życia. 
+#### Podsumywując możemy stwierdzić, że wraz ze wzrostem średniej ilości lat poświeconych na edukację wzrasta średnia długość życia.
+
+### 3. Czy wartość BMI ma wpływ na średnią długość życia?
+
+#### Poniższy wykres przedstawia rozkład kraji ze względu na ich średnią długość życia przy danej średniej wartości BMI
+
+```{R fig.height=5, fig.width=8}
+bmi_plot <- ggplot()+
+  geom_point(aes(y = tabela_bez_NA$avrgLifeExp, x = tabela_bez_NA$avrgBMI), size = 3, alpha = 0.4, col = "brown")+
+  scale_color_brewer(palette = "Set1")+
+  geom_smooth(method=lm, linetype="solid", color="red", fill="pink")+
+  labs(title = "Zależność między średnia długością życia w poszczególnych latach, a BMI",
+       x = "Wartość BMI (kg/m^2)",
+       y = "Średnia długość życia (w latach)")+
+  theme_bw()
+(bmi_plot)
+
+```
+
+#### Możemy zauważyć, że w krajach o niższej wartości BMI (średnia ok. 21), średnia długość życia również jest niższa. Natomiast w krajach o wyższej wartości BMI (średnia między 24-27 ), średnia długość życia jest również wyższa.
+
+#### Rozważmy także wykresy osobne dla kobiet i mężczyzn. 
+
+```{R}
+bmi_male_plot <- ggplot()+
+  geom_point(aes(y = tabela_bez_NA$avrgLifeExp, x = tabela_bez_NA$MaleBMI), size = 2, col = "lightblue")+
+  scale_color_brewer(palette = "Set1")+
+  labs(x = "Wartość BMI mężczyzn",
+       y = "Średnia długość życia (w latach)")+
+  theme_bw()
+
+bmi_female_plot <- ggplot()+
+  geom_point(aes(y = tabela_bez_NA$avrgLifeExp, x = tabela_bez_NA$FemaleBMI), size = 2, col = "pink")+
+  scale_color_brewer(palette = "Set1")+
+  geom_smooth(method=lm, linetype="solid", color="red", fill="pink")+
+  labs(x = "Wartość BMI kobiet",
+       y = "Średnia długość życia (w latach)")+
+  theme_bw()
+
+
+bmi_zestawienie <- ggarrange(bmi_female_plot,bmi_male_plot,
+                                   labels = c("Kobiety", "Mężczyźni"),
+                                   ncol = 2)
+(bmi_zestawienie)
+```
+
+#### Jak widzimy, wykresy dla kobiet oraz dla mężczyzn, bardzo podobnie się prezentują, jedynie u mężczyzn lepiej widać wspomnianą wcześniej zależność, że wzraz ze wzrostem lub spadkiem wartości BMI, średnia długość życia odpowiednio wzrasta lub maleje, więc płeć nie ma tutaj większego znaczenia przy rozkładzie tej zależności.
+
+#### Podsumowując, można więc stwierdzić, że wartość BMI ma wpływ na średnią długość życia. Do pewnego stopnia, im wyższa średnia wartość BMI tym dłuższa średnia ilość lat życia, a im mniejsza wartość BMI tym krótsza jest średnia długość życia. 
+
+### 4. Czy śmierci niemowląt mają wpływ na skrócenie średniej długości życia? 
+
+
+```{R}
+infant_deaths_plot <- ggplot(mapping = aes(y = tabela_bez_NA$avrgLifeExp, x = tabela_bez_NA$infant_deaths))+
+  geom_point(col = "blue")+
+  geom_smooth(method=lm, linetype="solid", color="red", fill="pink")+
+  labs(title = "Zależność między śr. długością lat życia, a śmierciami dzieci podczas 1. roku życia",
+       x = "Śmierci dzieci podczas 1. roku życia (na 1000 żyć)",
+       y = "Średnia długość życia (w latach)")+
+  theme_bw()
+(infant_deaths_plot)
+
+```
+
+#### Na wykresie widać zależność, że wraz ze wzrostem ilości śmierci niemowląt, średnia długość życia na świecie maleje.
+
+### 5. Czy liczba zgonów matek podczas danego roku, definiowana jako zgon kobiety podczas ciąży lub,w nie odległym terminie od ciąży, ma wpływ na wartość średniej długości życia na świecie?
+
+```{R}
+maternity_deaths_plot <- 
+  tabela_bez_NA%>%
+  filter(maternalDeaths < 7500)%>%
+  ggplot(mapping = aes(y = avrgLifeExp, x = maternalDeaths))+
+  geom_point(col = "darkgreen", size = 3)+
+  geom_smooth(method=lm, linetype="solid", color="red", fill="transparent")+
+  labs(title = "Zależność między liczbą zgonów matek, a średnią długością życia",
+       x = "Śmierci matek",
+       y = "Średnia długość życia (w latach)")+
+  theme_bw()
+(maternity_deaths_plot)
+```
+
+#### Z wykresu możemy odczytać, że wraz ze wzrostem ilości śmierci kobiet, spada średnia długość życia.
+
+### 6. Czy liczba dostępnych lekarzy wpływa na wydłużenie średniej długości życią?
+
+```{R}
+tabela_lifeExp_medicalDoctors <- left_join(life_expectancy_razem, medical_doctors)
+doctors_histogram <- tabela_lifeExp_medicalDoctors%>%
+  ggplot() + 
+  geom_histogram(mapping = aes(x = numberOfDoctors, y = ..density..),
+                 breaks = seq(0,7,1),
+                 fill = "blue",
+                 colour = "black",
+                 )+
+  labs(x= "Liczba doktorów",
+       y = "Gęstość")+
+  theme_bw()
+(doctors_histogram)
+```
+
+#### Z powyższego histogramu możemy odczytać jak rozkłada się średnia liczba doktorów na całym świecie. Zdecydowana większość kraji ma średnią równą 1 lub mniej. Zobaczmy jak wpływa rozkład tej zmiennej na średnią długość życia ludzi. 
+
+```{R}
+tabela_lifeExp_medicalDoctors <- left_join(life_expectancy_razem, medical_doctors)
+
+medical_doctors_plot <- ggplot(mapping = aes(x = tabela_lifeExp_medicalDoctors$avrgLifeExp, y = tabela_lifeExp_medicalDoctors$numberOfDoctors))+
+  geom_point(alpha = 0.1, col = "black")+
+  labs(title = "Zależność między dostępną średnią liczbą doktorów, a średnią długością życia",
+       y = "Liczba doktorów (na 1000 os.)",
+       x = "Średnia długość życia (w latach)")+
+  theme_bw()
+(medical_doctors_plot)
+```
+
+####  Z wykresu możemy zauważyć, że do pewnego stopnia im większa jest liczba doktorów dostępnych dla ludzi, tym większa jest średnia długość życia. Przy liczbach powyżej ok. 5 doktorów na 1000 osób ich większa ilość nie ma większego wpływu na wydłużenie średniej długości życia. 
+
+### 7. Jakie są korelacje między średnią długością życia a różnymi zestawami danych? 
+#
+#### Poniżej tworzymy macierz korelacji różnych zmiennych w tym średniej długości życia.
+```{R}
+
+#korelacje
+tabela_bez_NA%>%
+  rename(śr_dł_życia = avrgLifeExp, BMI_kobiet = FemaleBMI, BMI_mezczyzn = MaleBMI, lata_edukacji_mezczyzn = SchoolingMale,lata_edukacji_kobiet = SchoolingFemale, śmierci_niemowląt = infant_deaths, śmierci_matek = maternalDeaths   )%>%
+  select(śr_dł_życia, BMI_kobiet, BMI_mezczyzn, lata_edukacji_mezczyzn, lata_edukacji_kobiet, śmierci_niemowląt, śmierci_matek)%>%
+ggcorr(label = T, size =3)
+
+```
+
+#### Jak możemy odczytać z powyższej macierzy istnieją wysokie korelację pomiędzy wybranymi zestawami danych a średnią długością życia. Dokładniej wynoszą one: 
+```{R}
+cor(tabela_bez_NA$avrgLifeExp, tabela_bez_NA$MaleBMI )
+cor(tabela_bez_NA$avrgLifeExp, tabela_bez_NA$FemaleBMI )
+cor(tabela_bez_NA$avrgLifeExp, tabela_bez_NA$SchoolingMale )
+cor(tabela_bez_NA$avrgLifeExp, tabela_bez_NA$SchoolingFemale )
+cor(tabela_bez_NA$avrgLifeExp, tabela_bez_NA$infant_deaths )
+cor(tabela_bez_NA$avrgLifeExp, tabela_bez_NA$maternalDeaths )
+```
+#### Średnia długość życia, a BMI kobiet: 0.75
+#### Średnia długość życia, a BMI mężczyzn: 0.60
+#### Średnia długość życia, a średnia ilość lat poświęconych na edukację u mężczyzn: 0.72
+#### Średnia długość życia, a średnia ilość lat poświęconych na edukację u kobiett: 0.71
+#### Średnia długość życia, a śmierci niemowlątt: -0.92
+#### Średnia długość życia, a śmierci matek: -0.58
+
+#### Jak pokazują powyższe statystyki oraz wcześniejsza macierz, najwyższa (ujemna) korelacja występuję między śmierciami niemowląt, a średnią długościa życia.
+
+#### Warto również zauważyć, że różni się korelacja między średnią długością życia, a BMI u kobiet, a u mężczyzn. 
+
